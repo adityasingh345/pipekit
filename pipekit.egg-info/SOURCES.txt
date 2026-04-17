@@ -1,0 +1,9 @@
+setup.py
+pipekit/__init__.py
+pipekit.egg-info/PKG-INFO
+pipekit.egg-info/SOURCES.txt
+pipekit.egg-info/dependency_links.txt
+pipekit.egg-info/top_level.txt
+pipekit/core/__init__.py
+pipekit/core/dag.py
+pipekit/core/task.py
