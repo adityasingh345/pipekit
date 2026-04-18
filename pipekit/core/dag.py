@@ -1,15 +1,42 @@
 from collections import deque
 from pipekit.core.state import TaskRun, TaskState
+from pipekit.db.models import get_engine, init_db, TaskRunModel
+from sqlalchemy.orm import Session
 
 class Dag:
-    def __init__(self, name):
+    def __init__(self, name, db_url = "postgresql://aditya:1234@127.0.0.1:5432/pipekit" ):
         self.name = name 
         self.tasks = {}
-    
+        self.engine = get_engine(db_url)
+        init_db(self.engine)
+            
     def add_task(self, task):
         self.tasks[task.name] = task
         return self
     
+    def _save_task_run(self, session, tr):
+        # we are saving or updating taksrun to the database
+        existing = session.query(TaskRunModel).filter_by(id=tr.id).first()
+        if existing:
+            existing.state = tr.state.value
+            existing.started_at = tr.started_at
+            existing.ended_at = tr.ended_at
+            existing.result = str(tr.result) if tr.result else None
+            existing.error = tr.error   
+        else:
+            session.add(TaskRunModel(
+                id=tr.id,
+                dag_name=self.name,
+                task_name=tr.task_name,
+                state=tr.state.value,
+                started_at=tr.started_at,
+                ended_at=tr.ended_at,
+                result=str(tr.result) if tr.result else None,
+                error=tr.error
+            ))
+        session.commit()
+            
+            
     def get_execution_order(self):
         degree = {task.name: 0 for task in self.tasks.values()}
         #it creates dictionary called degree where key = task.name and value = 0
@@ -60,23 +87,31 @@ class Dag:
         artifact_store = {} # task name and  -> result 
         run_log = {} # task_name > TaskRun
         
-        for i, stage in enumerate(stages):
-            for task in stage:
-                
-                tr = TaskRun(task_name= task.name)
-                run_log[task.name] = tr
-                
-                inputs = [artifact_store[dep.name] for dep in task.dependencies]
-                
-                tr.mark_running()
-                try:
-                    result = task(*inputs)
-                    artifact_store[task.name] = result
-                    tr.mark_success(result)
-                except Exception as e:
-                    tr.mark_failed(str(e))
-                    print(f"{self.name} failed at task {task.name}")
-                    return run_log # it will stop everything
+        with Session(self.engine) as session:
+            for i, stage in enumerate(stages):
+                for task in stage:
+                    
+                    tr = TaskRun(task_name= task.name)
+                    run_log[task.name] = tr
+                    
+                    # save as pending 
+                    self._save_task_run(session, tr)
+                    
+                    inputs = [artifact_store[dep.name] for dep in task.dependencies]
+                    
+                    
+                    tr.mark_running()
+                    self._save_task_run(session, tr) # save as running 
+                    try:
+                        result = task(*inputs)
+                        artifact_store[task.name] = result
+                        tr.mark_success(result)
+                        self._save_task_run(session, tr)
+                    except Exception as e:
+                        tr.mark_failed(str(e))
+                        self._save_task_run(session, tr)
+                        print(f"{self.name} failed at task {task.name}")
+                        return run_log # it will stop everything
         
         print(f"{self.name} completed")
         return run_log  

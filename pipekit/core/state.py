@@ -1,7 +1,7 @@
 from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime
-
+import uuid
 
 class TaskState(Enum):
     PENDING  = "pending"
@@ -19,6 +19,7 @@ class TaskRun:
     ended_at: datetime = None
     result: object = None
     error: str = None
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     
     def mark_running(self):
         self.state = TaskState.RUNNING

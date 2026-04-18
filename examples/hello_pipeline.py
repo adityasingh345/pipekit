@@ -1,14 +1,31 @@
 from pipekit.core.task import task
+from pipekit.core.dag import Dag
 
-attempt_count = 0 
+@task
+def extract():
+    print("extracting raw data")
+    return "raw_data"
 
-@task(retries=3)
-def flaky():
-    global attempt_count
-    attempt_count += 1
-    if attempt_count < 3:
-        raise ValueError("not ready yet")
-    return "finally worked"
+@task
+def transform(data):
+    print(f"transforming data: {data}")
+    return data.upper()
 
-result = flaky()
-print(f"Result: {result}")
+@task
+def load(data):
+    print(f"loading data: {data}")
+    return f"saved({data})"
+
+transform.depends_on(extract)
+load.depends_on(transform)
+
+dag = Dag("etl_pipeline")
+dag.add_task(extract)
+dag.add_task(transform)
+dag.add_task(load)
+
+run_log = dag.run()
+
+print("\n--- Run Summary ---")
+for name, tr in run_log.items():
+    print(tr)
