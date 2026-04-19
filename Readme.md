@@ -25,3 +25,9 @@ Why do you think we chose PostgreSQL specifically for state storage, instead of 
  3. ACID guarantees -> if the server crashes mod-write, postgresql recovers cleanly.
 
  we will use sqlalchemy python orm to talk to postgress and alembic for migrations 
+
+
+ ----------------> teh goal is to trigger and inspect pipelines from the terminal,
+ @click.group() - make sthe command group. it is like the main entry point that holds sub-commands (run, status, logs)
+ @click.command() - register the sub command under the group
+ @click.argument("name") - a required positional argument.
