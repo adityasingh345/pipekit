@@ -1,6 +1,8 @@
 from datetime import datetime
 import time 
 
+TASK_REGISTRY = {}
+
 class Task:
     def __init__(self, func, retries=0, timeout=None):
         self.func = func
@@ -8,6 +10,7 @@ class Task:
         self.retries = retries
         self.timeout = timeout
         self.dependencies = [] 
+        TASK_REGISTRY[self.name] = self
         
     def __call__(self, *args, **kwargs):
         attempts = 0

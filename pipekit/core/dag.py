@@ -2,6 +2,7 @@ from collections import deque
 from pipekit.core.state import TaskRun, TaskState
 from pipekit.db.models import get_engine, init_db, TaskRunModel
 from sqlalchemy.orm import Session
+from pipekit.worker.worker import execute_task
 
 class Dag:
     def __init__(self, name, db_url = "postgresql://aditya:1234@127.0.0.1:5432/pipekit" ):
@@ -89,29 +90,29 @@ class Dag:
         
         with Session(self.engine) as session:
             for i, stage in enumerate(stages):
+                #we will send all tak in this stage to redis simulatneously
+                futures = {}
                 for task in stage:
-                    
                     tr = TaskRun(task_name= task.name)
                     run_log[task.name] = tr
-                    
+                    tr.mark_running()
                     # save as pending 
                     self._save_task_run(session, tr)
                     
                     inputs = [artifact_store[dep.name] for dep in task.dependencies]
+                    futures[task.name] = (execute_task.delay(task.name, inputs), tr)
                     
-                    
-                    tr.mark_running()
-                    self._save_task_run(session, tr) # save as running 
-                    try:
-                        result = task(*inputs)
-                        artifact_store[task.name] = result
-                        tr.mark_success(result)
-                        self._save_task_run(session, tr)
-                    except Exception as e:
-                        tr.mark_failed(str(e))
-                        self._save_task_run(session, tr)
-                        print(f"{self.name} failed at task {task.name}")
-                        return run_log # it will stop everything
+                for task_name, (futures, tr) in futures.items():
+                        try:
+                            result = futures.get(timeout=30)
+                            artifact_store[task_name] = result
+                            tr.mark_success(result)
+                            self._save_task_run(session, tr)
+                        except Exception as e:
+                            tr.mark_failed(str(e))
+                            self._save_task_run(session, tr)
+                            print(f"{self.name} failed at task {task.name}")
+                            return run_log # it will stop everything
         
         print(f"{self.name} completed")
         return run_log  
